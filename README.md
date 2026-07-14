@@ -1,6 +1,6 @@
 # RF Photon Transport Simulation and CNN-Based Technosignature Detection
 
-We simulate the degradation of narrowband SETI signals through turbulent stellar plasma (Exo-IPM) using Monte Carlo methods. This Lorentzian broadening evades classical detectors. To solve this, we developed a 1D CNN that identifies these dispersed technosignatures with >97% accuracy under severe thermal noise.
+We simulate the degradation of narrowband SETI signals through turbulent stellar plasma (Exo-IPM) using Monte Carlo methods. This Lorentzian broadening evades classical detectors. To solve this, we developed a 1D CNN that identifies these dispersed technosignatures with >95% accuracy under severe thermal noise.
 
 ---
 

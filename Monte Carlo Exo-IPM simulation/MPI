@@ -1,0 +1,108 @@
+import numpy as np
+from scipy.stats import cauchy
+import matplotlib.pyplot as plt
+
+def sim_foton(f0,r0,rm,vel,k_turb=1.0):
+    c=3e8 # velocidad de la luz
+    fac=5e-7 # factor de escala para el cambio de frecuencia
+    mi=int(500*max(1.0,k_turb**(3/5))) # número máximo de interacciones
+    nu=f0 # frecuencia inicial
+    r=r0 # posición inicial
+    n=0 # contador de interacciones
+    while r<rm and n<mi: # mientras el fotón no haya salido del sistema o alcanzado el límite de interacciones
+        mu=0.05*(k_turb**(3/5))*((r/10)**-4)*((nu/1e9)**-1.2) # coeficiente de absorción
+        s=-(1/mu)*np.log(np.random.uniform(0,1)) # distancia hasta la próxima interacción
+        r+=s # actualizar la posición del fotón
+        if r>=rm: # si el fotón ha salido del sistema, terminamos la simulación
+            break
+        v_perp=vel*np.random.rayleigh(1) # velocidad perpendicular del fotón debido a la turbulencia
+        nu+=nu*(v_perp/c)*np.random.uniform(-1,1)*fac # actualizar la frecuencia del fotón debido al efecto Doppler
+        n+=1 # incrementar el contador de interacciones
+    return nu-f0 # devolver el cambio total en la frecuencia del fotón
+
+def generar_sistema_estelar(): # función para generar un sistema estelar aleatorio
+    es_enana_m=np.random.random()<0.75 # 75% de probabilidad de ser una enana M
+    V_sol=400e3 # velocidad típica de las estrellas en la galaxia
+    if es_enana_m: # si es una enana M, asignamos parámetros aleatorios dentro de ciertos rangos
+        R_estrella=np.random.uniform(0.08,0.7) # radio de la estrella en unidades solares
+        vel=np.random.uniform(1,8)*V_sol # velocidad de la estrella entre 1 y 8 veces la velocidad solar
+        k_turb=np.random.uniform(0.3,150) # nivel de turbulencia entre 0.3 y 150
+        a_Rs=R_estrella*(10**np.random.uniform(1,2)) # semieje mayor del planeta en unidades del radio de la estrella
+    else:
+        R_estrella=1.0 # si es una estrella tipo sol, el radio es 1 unidad solar
+        vel=V_sol # velocidad solar
+        k_turb=1.0  # nivel de turbulencia estándar
+        a_Rs=1.0*(10**np.random.uniform(np.log10(10),np.log10(217))) # semieje mayor del planeta entre 10 y 217 unidades del radio solar
+    e=np.random.uniform(0,0.9) # excentricidad de la órbita entre 0 y 0.9
+    cos_i=np.random.uniform(0,1) # coseno del ángulo de inclinación entre 0 y 1
+    i=np.arccos(cos_i) # ángulo de inclinación en radianes
+    omega=np.random.uniform(0,2*np.pi) # argumento del periastro entre 0 y 2π
+    f_anom=np.random.uniform(0,2*np.pi) # anomalía verdadera entre 0 y 2π
+    r_planeta=(a_Rs*(1-e**2))/(1+e*np.cos(f_anom)) # distancia del planeta a la estrella en el momento de la simulación
+    geom=np.sqrt(max(0,1-(np.sin(i)**2)*(np.sin(omega+f_anom)**2))) # factor geométrico para calcular el impacto del planeta
+    R_imp=r_planeta*geom # distancia de impacto del fotón con la estrella
+    if R_imp<=R_estrella or R_imp>200: # si el fotón impacta dentro de la estrella o demasiado lejos, descartamos este sistema
+        return None # devolvemos None para indicar que este sistema no es válido
+    return {'es_dm':es_enana_m,'R_imp':R_imp,'vel':vel,'k_turb':k_turb,'R_est':R_estrella} # devolvemos un diccionario con los parámetros del sistema estelar generado
+
+N_SISTEMAS=100 # número de sistemas estelares a simular
+N_FOTONES=50 # número de fotones a simular por sistema para obtener una distribución estadística del cambio de frecuencia debido a la turbulencia y el impacto con la estrella.
+Callbacks = 10 # cada cuántos sistemas imprimir un mensaje de progreso (ajustable según el tamaño de N_SISTEMAS para evitar saturar la salida con demasiados mensajes)
+resultados,tipos=[],[] # listas para almacenar los resultados de los cambios de frecuencia y el tipo de estrella (enana M o sol) para cada sistema simulado
+
+print(f"iniciando para {N_SISTEMAS} sistemas...") # mensaje inicial indicando el número de sistemas que se van a simular
+
+for k in range(N_SISTEMAS): # iteramos sobre el número de sistemas a simular
+    if k%Callbacks==0:print(f"procesando sistema {k}...") # mensaje de progreso cada 'Callbacks' sistemas
+    sys=generar_sistema_estelar() # generamos un sist,.ema estelar aleatorio
+    if sys is None:continue # si el sistema no es válido (por impacto dentro de la estrella o demasiado lejos), lo descartamos y pasamos al siguiente
+    desplazamientos=np.array([sim_foton(1e9,sys['R_imp'],200.0,sys['vel'],sys['k_turb']) for _ in range(N_FOTONES)]) # simulamos N_FOTONES fotones para este sistema y almacenamos los cambios de frecuencia en un array de numpy
+    _,gamma=cauchy.fit(desplazamientos) # ajustamos una distribución de Cauchy a los cambios de frecuencia obtenidos para estimar el parámetro de escala gamma, que representa el ancho de la distribución y es una medida del ensanchamiento espectral causado por la turbulencia y el impacto con la estrella
+    dnu=2*gamma # calculamos el ensanchamiento espectral como el doble del parámetro de escala gamma obtenido del ajuste de la distribución de Cauchy
+    resultados.append(dnu) # almacenamos el resultado del ensanchamiento espectral para este sistema
+    tipos.append(sys['es_dm'])  # almacenamos el tipo de estrella (enana M o sol) para este sistema, lo que nos permitirá analizar las diferencias en el ensanchamiento espectral entre ambos tipos de estrellas en el análisis posterior
+
+    cme = np.random.random() < 0.03 
+    if cme:
+        b_ani = np.random.uniform(10, 100) 
+        dnu = dnu * b_ani
+
+resultados=np.array(resultados) # convertimos la lista de resultados a un array de numpy para facilitar el análisis estadístico y la visualización posterior
+tipos=np.array(tipos) # convertimos la lista de tipos a un array de numpy, donde cada elemento es un booleano que indica si el sistema es una enana M (True) o una estrella tipo sol (False), lo que nos permitirá segmentar los resultados por tipo de estrella en el análisis posterior
+dnu_vals=np.logspace(-2,5,200) # generamos un array de valores de ensanchamiento espectral (delta nu) en una escala logarítmica desde 0.01 Hz hasta 100,000 Hz, con 200 puntos, para evaluar la función de supervivencia S(delta nu) que representa la probabilidad de que el ensanchamiento espectral sea mayor que cada uno de estos valores, tanto para la población total como para las subpoblaciones de enanas M y estrellas tipo sol.
+S_total=[np.mean(resultados>v) for v in dnu_vals] # calculamos la función de supervivencia S(delta nu) para la población total, que es la proporción de sistemas que tienen un ensanchamiento espectral mayor que cada valor en dnu_vals, lo que nos dará una idea de la distribución del ensanchamiento espectral en toda la muestra de sistemas simulados.
+S_dm=[np.mean(resultados[tipos]>v) for v in dnu_vals]  # calculamos la función de supervivencia S(delta nu) para la subpoblación de enanas M, que es la proporción de sistemas que son enanas M (tipos=True) y que tienen un ensanchamiento espectral mayor que cada valor en dnu_vals, lo que nos permitirá comparar la distribución del ensanchamiento espectral entre las enanas M y las estrellas tipo sol.
+S_sol=[np.mean(resultados[~tipos]>v) for v in dnu_vals] # calculamos la función de supervivencia S(delta nu) para la subpoblación de estrellas tipo sol, que es la proporción de sistemas que son estrellas tipo sol (tipos=False) y que tienen un ensanchamiento espectral mayor que cada valor en dnu_vals, lo que nos permitirá comparar la distribución del ensanchamiento espectral entre las estrellas tipo sol y las enanas M.
+
+tipos_int=tipos.astype(int) # convertimos el array de booleanos 'tipos' a un array de enteros (1 para enanas M y 0 para estrellas tipo sol) para facilitar la exportación a CSV y el análisis posterior, ya que los valores booleanos pueden no ser interpretados correctamente en algunos programas de análisis de datos o visualización.
+
+datos_csv=np.column_stack((resultados, tipos_int)) # combinamos los resultados de ensanchamiento espectral y los tipos de estrellas en un solo array de 2 columnas, donde la primera columna contiene los valores de delta nu (ensanchamiento espectral) y la segunda columna contiene los valores enteros que indican el tipo de estrella (1 para enanas M y 0 para estrellas tipo sol), lo que nos permitirá exportar estos datos a un archivo CSV para su análisis posterior en programas como Excel, R o Python, facilitando la visualización y el análisis estadístico de la relación entre el tipo de estrella y el ensanchamiento espectral.
+
+nombre_archivo=f"resultados_sintesis_{N_SISTEMAS}_sistemas.csv" # definimos el nombre del archivo CSV donde se guardarán los resultados, incluyendo el número de sistemas simulados en el nombre del archivo para facilitar la identificación de los datos, especialmente si se realizan múltiples simulaciones con diferentes números de sistemas.
+np.savetxt(
+    nombre_archivo,
+    datos_csv,
+    delimiter=",",
+    header="Delta_nu_sb_Hz,Es_Enana_M_1_Sol_0",
+    comments="",
+    fmt=["%.6e", "%d"]
+)
+
+print(f"\n¡Datos guardados exitosamente en '{nombre_archivo}'!") # mensaje final indicando que los datos han sido guardados exitosamente en el archivo CSV, lo que confirma que la simulación y el proceso de exportación de datos se han completado sin errores.
+
+plt.style.use('dark_background')
+fig,ax1=plt.subplots(figsize=(8,6))
+ax1.semilogx(dnu_vals,S_total,color='white',lw=3,label='población total')
+ax1.semilogx(dnu_vals,S_dm,color='#FF5733',lw=2,ls='--',label='enanas M (75%)')
+ax1.semilogx(dnu_vals,S_sol,color='#33C1FF',lw=2,ls=':',label='sol (25%)')
+ax1.fill_between(dnu_vals,S_total,color='gray',alpha=0.1)
+ax1.set_title("función de supervivencia S(Deltavsb)",fontsize=14)
+ax1.set_xlabel("ensanchamiento espectral hz")
+ax1.set_ylabel("probabilidad de ensanchamiento>Deltanu")
+ax1.grid(alpha=0.2)
+ax1.legend()
+plt.tight_layout()
+plt.show()
+
+print(f"sistemas con deltaν > 1 hz: {np.mean(resultados>1)*100:.1f}%")
+print(f"sistemas con deltaν > 10 hz: {np.mean(resultados>10)*100:.1f}%")
